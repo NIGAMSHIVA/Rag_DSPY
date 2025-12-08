@@ -38,9 +38,7 @@ collection.upsert(
     embeddings=embeddings
 )
 
-# -------------------------------------------------------------
-# 4. DSPy RETRIEVER (RM)
-# -------------------------------------------------------------
+
 class ChromaRM(dspy.Retrieve):
     def __init__(self, k=3):
         super().__init__(k=k)
