@@ -1,103 +1,44 @@
+# main.py
+
+from fastapi import FastAPI, UploadFile, File
+import uvicorn
 import os
-import dspy
-from chromadb import PersistentClient
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
 
-load_dotenv()
+from rag_engine import process_pdf, rag_pipeline
 
-lm = dspy.LM(
-    model="groq/llama-3.1-8b-instant",
-    api_key=os.getenv["GROQ_API_KEY"],
-    max_tokens=512,
-    temperature=0.2,
-)
+app = FastAPI()
 
-embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+UPLOAD_FOLDER = "./uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-chroma_client = PersistentClient(path="./rag_chroma_store")
+# -------------------------------
+# Upload PDF Route
+# -------------------------------
+@app.post("/upload-pdf")
+async def upload_pdf(pdf: UploadFile = File(...)):
+    file_path = os.path.join(UPLOAD_FOLDER, pdf.filename)
 
-collection = chroma_client.get_or_create_collection(
-    name="my_docs",
-    metadata={"hnsw:space": "cosine"}
-)
+    with open(file_path, "wb") as f:
+        f.write(await pdf.read())
 
-documents = [
-    "DSPy is a framework for building modular LLM pipelines.",
-    "RAG stands for Retrieval Augmented Generation.",
-    "Groq provides extremely fast inference for Llama-3 models.",
-    "Chroma is a lightweight vector database used in RAG pipelines."
-]
+    chunks = process_pdf(file_path)
 
-ids = [f"doc_{i}" for i in range(len(documents))]
-embeddings = embedder.encode(documents).tolist()
-
-collection.upsert(
-    ids=ids,
-    documents=documents,
-    embeddings=embeddings
-)
+    return {"status": "success", "chunks_added": chunks}
 
 
-class ChromaRM(dspy.Retrieve):
-    def __init__(self, k=3):
-        super().__init__(k=k)
-
-    def forward(self, query):
-        query_vec = embedder.encode([query]).tolist()[0]
-
-        results = collection.query(
-            query_embeddings=[query_vec],
-            n_results=self.k
-        )
-
-        passages = results["documents"][0]
-
-        return dspy.Prediction(passages=passages)
+# -------------------------------
+# Ask Query Route
+# -------------------------------
+@app.get("/query")
+def ask_query(q: str):
+    result = rag_pipeline(question=q)
+    return {
+        "question": q,
+        "context": result.context,
+        "answer": result.answer
+    }
 
 
-retriever = ChromaRM(k=3)
-
-dspy.configure(lm=lm, rm=retriever)
-
-
-class RAGAnswer(dspy.Signature):
-        intent: str = dspy.InputField(desc="The purpose behind the user's query.") 
-        question: str = dspy.InputField()
-        context: str = dspy.InputField()
-        answer: str = dspy.OutputField(
-        desc="Answer using provided context only."
-    )
-
-
-class MyRAG(dspy.Module):
-    def __init__(self, k=3):
-        super().__init__()
-        self.retriever = retriever
-        self.answerer = dspy.ChainOfThought(RAGAnswer)
-
-    def forward(self, question):
-        retrieved = self.retriever(question)
-        context = "\n".join(retrieved.passages)
-
-        result = self.answerer(
-            intent="answer strictly using provided context only",
-            question=question,
-            context=context
-        )
-        
-        return dspy.Prediction(
-            answer=result.answer,
-            context=context
-        )
-rag_pipeline = MyRAG(k=3)
-
-query = "what is m4 in mac"
-response = rag_pipeline(question=query)
-
-print("\nQUESTION:")
-print(query)
-
-print("\nRETRIEVED CONTEXT:\n", response.context)
-
-print("\nANSWER:\n", response.answer)
+# Run server
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
