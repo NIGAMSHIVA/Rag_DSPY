@@ -5,17 +5,10 @@ from chromadb import PersistentClient
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
-# ---------------------------
-# Load environment + LLM
-# ---------------------------
+
 from dotenv import load_dotenv
 load_dotenv()
 
-print("DEBUG KEY =", os.getenv("GROQ_API_KEY"))
-
-
-
-print("Loaded key:", os.getenv("GROQ_API_KEY"))
 
 lm = dspy.LM(
     model="groq/llama-3.1-8b-instant",
@@ -24,10 +17,8 @@ lm = dspy.LM(
     temperature=0.1,
 )
 
-# Embeddings
 embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-# Chroma DB
 chroma_client = PersistentClient(path="./db/rag_chroma_store")
 
 collection = chroma_client.get_or_create_collection(
@@ -35,9 +26,7 @@ collection = chroma_client.get_or_create_collection(
     metadata={"hnsw:space": "cosine"}
 )
 
-# ---------------------------
-# PDF Text Extraction
-# ---------------------------
+
 def extract_text_from_pdf(file_path):
     reader = PdfReader(file_path)
     text = ""
@@ -45,10 +34,6 @@ def extract_text_from_pdf(file_path):
         text += page.extract_text() + "\n"
     return text
 
-
-# ---------------------------
-# Chunk text
-# ---------------------------
 def chunk_text(text, chunk_size=300):
     words = text.split()
     chunks = []
@@ -58,9 +43,6 @@ def chunk_text(text, chunk_size=300):
     return chunks
 
 
-# ---------------------------
-# Upload PDF → embed → store
-# ---------------------------
 def process_pdf(file_path):
     raw_text = extract_text_from_pdf(file_path)
     chunks = chunk_text(raw_text)
@@ -76,9 +58,6 @@ def process_pdf(file_path):
     return len(chunks)
 
 
-# ---------------------------
-# DSPy Retrieval Module
-# ---------------------------
 class ChromaRM(dspy.Retrieve):
     def __init__(self, k=3):
         super().__init__(k=k)
@@ -97,9 +76,6 @@ retriever = ChromaRM(k=3)
 dspy.configure(lm=lm, rm=retriever)
 
 
-# ---------------------------
-# Signature + Answer Module
-# ---------------------------
 class RAGAnswer(dspy.Signature):
     intent: str = dspy.InputField()
     question: str = dspy.InputField()

@@ -34,7 +34,6 @@ def ask_query(q: str):
     result = rag_pipeline(question=q)
     return {
         "question": q,
-        "context": result.context,
         "answer": result.answer
     }
 
