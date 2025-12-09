@@ -1,4 +1,3 @@
-# main.py
 
 from fastapi import FastAPI, UploadFile, File
 import uvicorn
@@ -11,9 +10,7 @@ app = FastAPI()
 UPLOAD_FOLDER = "./uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# -------------------------------
-# Upload PDF Route
-# -------------------------------
+
 @app.post("/upload-pdf")
 async def upload_pdf(pdf: UploadFile = File(...)):
     file_path = os.path.join(UPLOAD_FOLDER, pdf.filename)
@@ -26,9 +23,7 @@ async def upload_pdf(pdf: UploadFile = File(...)):
     return {"status": "success", "chunks_added": chunks}
 
 
-# -------------------------------
-# Ask Query Route
-# -------------------------------
+
 @app.get("/query")
 def ask_query(q: str):
     result = rag_pipeline(question=q)
@@ -38,6 +33,5 @@ def ask_query(q: str):
     }
 
 
-# Run server
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
