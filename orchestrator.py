@@ -16,7 +16,9 @@ from tavily import TavilyClient
 import imaplib
 import email
 from email.header import decode_header
-
+import re
+import smtplib
+from email.mime.text import MIMEText
 
 # --- 1. ENV + LLM CONFIG (reuse Groq like in rag_engine.py) ------------------
 
@@ -153,7 +155,7 @@ def web_search_agent(state: ConversationState) -> ConversationState:
 
 
 # 5.3. Email Agent (very simple demo – expects env vars)
-def email_agent(state: ConversationState) -> ConversationState:
+# def email_agent(state: ConversationState) -> ConversationState:
     q = state["query"]
 
     email_host = os.getenv("EMAIL_HOST")
@@ -243,6 +245,82 @@ def email_agent(state: ConversationState) -> ConversationState:
         state["answer"] = f"Email agent error: {str(e)}"
         state.setdefault("debug", {})["email_info"] = {"mode": "error"}
         return state
+def email_agent(state: ConversationState) -> ConversationState:
+    q = state["query"].lower()
+
+    # -----------------------------
+    # 1️⃣ Extract Email Address
+    # -----------------------------
+    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    found_emails = re.findall(email_pattern, q)
+    receiver_email = found_emails[0] if found_emails else None
+
+    # -----------------------------
+    # 2️⃣ Extract Message / Body
+    # -----------------------------
+    # Examples:
+    # "send email to X saying HELLO"
+    # "email X message HELLO"
+    # "send mail to X with body HELLO"
+    message_body = None
+
+    if "saying" in q:
+        message_body = q.split("saying", 1)[1].strip()
+    elif "message" in q:
+        message_body = q.split("message", 1)[1].strip()
+    elif "body" in q:
+        message_body = q.split("body", 1)[1].strip()
+
+    # -----------------------------
+    # 3️⃣ Validation checks
+    # -----------------------------
+    if not receiver_email:
+        state["intent"] = "email_send"
+        state["answer"] = "❌ No email address found in your query."
+        return state
+
+    if not message_body:
+        state["intent"] = "email_send"
+        state["answer"] = "❌ No message/body found in your query."
+        return state
+
+    # -----------------------------
+    # 4️⃣ SMTP Credentials
+    # -----------------------------
+    email_host = os.getenv("EMAIL_HOST")
+    email_port = int(os.getenv("EMAIL_PORT", "587"))
+    email_user = os.getenv("EMAIL_USER")
+    email_pass = os.getenv("EMAIL_PASSWORD")
+
+    if not (email_host and email_user and email_pass):
+        state["intent"] = "email_send"
+        state["answer"] = "❌ Email credentials missing in server configuration."
+        return state
+
+    # -----------------------------
+    # 5️⃣ SEND EMAIL
+    # -----------------------------
+    try:
+        msg = MIMEText(message_body)
+        msg["Subject"] = "Message from DSPy Email Agent"
+        msg["From"] = email_user
+        msg["To"] = receiver_email
+
+        server = smtplib.SMTP(email_host, email_port)
+        server.starttls()
+        server.login(email_user, email_pass)
+        server.sendmail(email_user, receiver_email, msg.as_string())
+        server.quit()
+
+        state["intent"] = "email_send"
+        state["answer"] = f"✅ Email sent successfully to {receiver_email}!"
+        return state
+
+    except Exception as e:
+        state["intent"] = "email_send"
+        state["answer"] = f"❌ Failed to send email: {str(e)}"
+        return state
+
 
 
 # --- 6. NODE: INTENT CLASSIFIER FOR LANGGRAPH --------------------------------
@@ -253,7 +331,7 @@ def classify_intent_node(state: ConversationState) -> ConversationState:
     intent_raw = (prediction.intent or "").strip().lower()
 
     if intent_raw not in ("rag", "web", "email"):
-        # Safe default: use RAG
+        # Safe default: use RAG``
         intent_raw = "rag"
 
     state["intent"] = intent_raw  # type: ignore
