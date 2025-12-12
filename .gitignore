@@ -3,3 +3,18 @@ venv/
 __pycache__/
 rag_chroma_store/
 uploads/
+node_modules
+*.bin
+*.sqlite3
+# Python
+__pycache__/
+.env
+
+# Chroma DB
+rag_chroma_store/
+*.bin
+*.sqlite3
+
+# Next.js
+.next/
+node_modules/
