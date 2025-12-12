@@ -1,6 +1,3 @@
-# orchestrator.py
-# NEW: LangGraph-based multi-agent orchestration around your DSPy RAG
-
 from __future__ import annotations
 
 from typing import TypedDict, Literal, Dict, Any
@@ -20,8 +17,6 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 
-# --- 1. ENV + LLM CONFIG (reuse Groq like in rag_engine.py) ------------------
-
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -37,12 +32,7 @@ lm = dspy.LM(
 
 dspy.configure(lm=lm)
 
-# --- 2. IMPORT YOUR EXISTING RAG PIPELINE -------------------------------------
-
-from rag_engine import rag_pipeline  # <- you already wrote this
-
-
-# --- 3. STATE SHAPE FOR LANGGRAPH --------------------------------------------
+from rag_engine import rag_pipeline  
 
 IntentType = Literal["rag", "web", "email"]
 
@@ -51,9 +41,6 @@ class ConversationState(TypedDict, total=False):
     intent: IntentType | None
     answer: str | None
     debug: Dict[str, Any]
-
-
-# --- 4. DSPy SIGNATURE FOR INTENT CLASSIFICATION -----------------------------
 
 class ClassifyIntent(dspy.Signature):
     """Decide whether a user query should go to RAG, Web Search, or Email agent.
@@ -82,27 +69,18 @@ class IntentRouter(dspy.Module):
 
 intent_router = IntentRouter()
 
-
-# --- 5. AGENT IMPLEMENTATIONS -------------------------------------------------
-
-# 5.1. RAG Agent (wrap your existing rag_pipeline)
 def rag_agent(state: ConversationState) -> ConversationState:
     q = state["query"]
-    result = rag_pipeline(question=q)   # your existing DSPy RAG pipeline
+    result = rag_pipeline(question=q)   
     state["intent"] = "rag"
     state["answer"] = result.answer
     state.setdefault("debug", {})["rag_raw"] = getattr(result, "context", None)
     return state
 
-
-# 5.2. Web Search Agent (Tavily + Groq summarization)
 def web_search_agent(state: ConversationState) -> ConversationState:
     q = state["query"]
     tavily_key = os.getenv("TAVILY_API_KEY")
 
-    # -------------------------------
-    # CASE 1: Tavily key NOT present
-    # -------------------------------
     if not tavily_key:
         duckduckgo_url = "https://duckduckgo.com/?q=" + q.replace(" ", "+")
 
@@ -111,8 +89,6 @@ def web_search_agent(state: ConversationState) -> ConversationState:
             f"Provide a helpful general answer. "
             f"You may optionally use this reference URL: {duckduckgo_url}."
         )
-
-        # Normalize LM output → FIXES .strip() ERROR
         if isinstance(raw_output, list):
             raw_output = raw_output[0]
 
@@ -124,10 +100,7 @@ def web_search_agent(state: ConversationState) -> ConversationState:
             "engine": "duckduckgo_url_only"
         }
         return state
-
-    # -------------------------------
-    # CASE 2: Tavily web search mode
-    # -------------------------------
+    
     tavily_client = TavilyClient(api_key=tavily_key)
     search_result = tavily_client.search(q, max_results=5)
 
@@ -136,8 +109,6 @@ def web_search_agent(state: ConversationState) -> ConversationState:
         f"QUESTION:\n{q}\n\n"
         f"WEB RESULTS:\n{search_result}"
     )
-
-    # Normalize LM output → FIX FOR YOU
     if isinstance(raw_output, list):
         raw_output = raw_output[0]
 
@@ -153,9 +124,6 @@ def web_search_agent(state: ConversationState) -> ConversationState:
     return state
 
 
-
-# 5.3. Email Agent (very simple demo – expects env vars)
-# def email_agent(state: ConversationState) -> ConversationState:
     q = state["query"]
 
     email_host = os.getenv("EMAIL_HOST")
@@ -248,20 +216,12 @@ def web_search_agent(state: ConversationState) -> ConversationState:
 def email_agent(state: ConversationState) -> ConversationState:
     q = state["query"].lower()
 
-    # -----------------------------
-    # 1️⃣ Extract Email Address
-    # -----------------------------
+   
     email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
     found_emails = re.findall(email_pattern, q)
     receiver_email = found_emails[0] if found_emails else None
 
-    # -----------------------------
-    # 2️⃣ Extract Message / Body
-    # -----------------------------
-    # Examples:
-    # "send email to X saying HELLO"
-    # "email X message HELLO"
-    # "send mail to X with body HELLO"
+    
     message_body = None
 
     if "saying" in q:
@@ -271,22 +231,18 @@ def email_agent(state: ConversationState) -> ConversationState:
     elif "body" in q:
         message_body = q.split("body", 1)[1].strip()
 
-    # -----------------------------
-    # 3️⃣ Validation checks
-    # -----------------------------
+  
     if not receiver_email:
         state["intent"] = "email_send"
-        state["answer"] = "❌ No email address found in your query."
+        state["answer"] = " No email address found in your query."
         return state
 
     if not message_body:
         state["intent"] = "email_send"
-        state["answer"] = "❌ No message/body found in your query."
+        state["answer"] = " No message/body found in your query."
         return state
 
-    # -----------------------------
-    # 4️⃣ SMTP Credentials
-    # -----------------------------
+  
     email_host = os.getenv("EMAIL_HOST")
     email_port = int(os.getenv("EMAIL_PORT", "587"))
     email_user = os.getenv("EMAIL_USER")
@@ -294,12 +250,10 @@ def email_agent(state: ConversationState) -> ConversationState:
 
     if not (email_host and email_user and email_pass):
         state["intent"] = "email_send"
-        state["answer"] = "❌ Email credentials missing in server configuration."
+        state["answer"] = " Email credentials missing in server configuration."
         return state
 
-    # -----------------------------
-    # 5️⃣ SEND EMAIL
-    # -----------------------------
+
     try:
         msg = MIMEText(message_body)
         msg["Subject"] = "Message from DSPy Email Agent"
@@ -313,17 +267,14 @@ def email_agent(state: ConversationState) -> ConversationState:
         server.quit()
 
         state["intent"] = "email_send"
-        state["answer"] = f"✅ Email sent successfully to {receiver_email}!"
+        state["answer"] = f" Email sent successfully to {receiver_email}!"
         return state
 
     except Exception as e:
         state["intent"] = "email_send"
-        state["answer"] = f"❌ Failed to send email: {str(e)}"
+        state["answer"] = f"Failed to send email: {str(e)}"
         return state
 
-
-
-# --- 6. NODE: INTENT CLASSIFIER FOR LANGGRAPH --------------------------------
 
 def classify_intent_node(state: ConversationState) -> ConversationState:
     q = state["query"]
@@ -339,8 +290,6 @@ def classify_intent_node(state: ConversationState) -> ConversationState:
     return state
 
 
-# --- 7. CONDITIONAL ROUTING FUNCTION FOR LANGGRAPH ---------------------------
-
 def route_from_intent(state: ConversationState) -> str:
     intent = state.get("intent", "rag")
     if intent == "web":
@@ -349,8 +298,6 @@ def route_from_intent(state: ConversationState) -> str:
         return "email_agent"
     return "rag_agent"  # default
 
-
-# --- 8. BUILD THE LANGGRAPH WORKFLOW -----------------------------------------
 
 graph = StateGraph(ConversationState)
 
@@ -375,5 +322,4 @@ graph.add_edge("rag_agent", END)
 graph.add_edge("web_agent", END)
 graph.add_edge("email_agent", END)
 
-# This is the compiled LangGraph app you will call from FastAPI
 orchestrator_app = graph.compile()
