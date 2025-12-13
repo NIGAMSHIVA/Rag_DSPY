@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+python-dotenv
+
+dspy
+litellm
+chromadb
+sentence-transformers
+pypdf
+
+requests
+httpx
+tenacity
+rich
