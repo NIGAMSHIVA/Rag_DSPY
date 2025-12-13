@@ -1,7 +1,3 @@
 export default function Loader() {
-  return (
-    <div className="mt-3 text-center text-sm text-gray-500">
-      ⏳ Processing...
-    </div>
-  );
+  return <p className="mt-2 text-gray-500">Thinking...</p>;
 }

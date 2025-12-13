@@ -1,15 +1,11 @@
-export default function ResponseCard({ data }: { data: any }) {
+export default function ResponseCard({ data }: any) {
   return (
-    <div className="mt-4 bg-gray-50 border rounded-lg p-4">
-      {data.intent && (
-        <p className="text-sm text-gray-500 mb-1">
-          Intent: <b>{data.intent.toUpperCase()}</b>
-        </p>
-      )}
+    <div className="mt-4 bg-gray-50 p-4 rounded">
+      <p className="text-sm text-gray-500 mb-1">
+        Intent: <b>{data.intent}</b>
+      </p>
 
-      <pre className="whitespace-pre-wrap text-sm">
-        {data.answer}
-      </pre>
+      <p className="whitespace-pre-wrap">{data.answer}</p>
     </div>
   );
 }
