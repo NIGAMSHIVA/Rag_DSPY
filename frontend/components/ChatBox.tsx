@@ -20,7 +20,7 @@ export default function ChatBox() {
       const data = await sendQuery(query);
       setResult(data);
     } catch (e) {
-      setResult({ answer: "❌ Backend not reachable" });
+      setResult({ answer: " Backend not reachable" });
     }
 
     setLoading(false);
